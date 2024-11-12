@@ -1,0 +1,66 @@
+name: deploy-batch-endpoint-pipeline
+
+on:
+  workflow_dispatch:
+
+jobs:
+  set-env-branch:
+    runs-on: ubuntu-latest
+    outputs:
+      config-file: ${{ steps.set-output-defaults.outputs.config-file }}
+    steps:
+      - id: set-prod-branch
+        name: set-prod-branch
+        if: ${{ github.ref == 'refs/heads/main' }}
+        run: echo "config_file=config-infra-prod.yml" >> $GITHUB_ENV
+      - id: set-dev-branch
+        name: set-dev-branch
+        if: ${{ github.ref != 'refs/heads/main' }}
+        run: echo "config_file=config-infra-dev.yml" >> $GITHUB_ENV
+      - id: set-output-defaults
+        name: set-output-defaults
+        run: echo "config-file=$config_file" >> $GITHUB_OUTPUT
+
+  get-config:
+    needs: set-env-branch
+    uses: 0Upjh80d/mlops-templates/.github/workflows/read-yaml.yml@main
+    with:
+      file_name: ${{ needs.set-env-branch.outputs.config-file }}
+
+  create-compute:
+    needs: get-config
+    uses: 0Upjh80d/mlops-templates/.github/workflows/create-compute.yml@main
+    with:
+      cluster_name: batch-cluster
+      size: Standard_DS3_v2
+      min_instances: 0
+      max_instances: 5
+      resource_group: ${{ needs.get-config.outputs.resource_group }}
+      workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
+      cluster_tier: dedicated # [low_priority, dedicated]
+    secrets:
+      creds: ${{ github.ref == 'refs/heads/main' && secrets.AZURE_CREDENTIALS_PROD || secrets.AZURE_CREDENTIALS_DEV }}
+
+  create-endpoint:
+    needs: [get-config, create-compute]
+    uses: 0Upjh80d/mlops-templates/.github/workflows/create-endpoint.yml@main
+    with:
+      endpoint_file: mlops/azureml/deploy/batch/batch-endpoint.yml
+      endpoint_postfix: ${{ needs.get-config.outputs.bep }}
+      endpoint_type: batch
+      resource_group: ${{ needs.get-config.outputs.resource_group }}
+      workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
+    secrets:
+      creds: ${{ github.ref == 'refs/heads/main' && secrets.AZURE_CREDENTIALS_PROD || secrets.AZURE_CREDENTIALS_DEV }}
+
+  create-deployment:
+    needs: [get-config, create-compute, create-endpoint]
+    uses: 0Upjh80d/mlops-templates/.github/workflows/create-deployment.yml@main
+    with:
+      endpoint_file: mlops/azureml/deploy/batch/batch-deployment.yml
+      endpoint_postfix: ${{ needs.get-config.outputs.bep }}
+      endpoint_type: batch
+      resource_group: ${{ needs.get-config.outputs.resource_group }}
+      workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
+    secrets:
+      creds: ${{ github.ref == 'refs/heads/main' && secrets.AZURE_CREDENTIALS_PROD || secrets.AZURE_CREDENTIALS_DEV }}

@@ -1,0 +1,95 @@
+# Copyright (c) Microsoft Corporation. All rights reserved.
+# Licensed under the MIT License.
+
+name: deploy-model-training-pipeline
+
+variables:
+  - ${{ if eq(variables['Build.SourceBranchName'], 'main') }}:
+      # 'main' branch: PRD environment
+      - template: ../../config-infra-prod.yml
+  - ${{ if ne(variables['Build.SourceBranchName'], 'main') }}:
+      # 'develop' or feature branches: DEV environment
+      - template: ../../config-infra-dev.yml
+  - name: version
+    value: aml-cli-v2
+
+trigger: none
+
+pool:
+  vmImage: ubuntu-latest
+
+resources:
+  repositories:
+    - repository: mlops-templates # Alias
+      name: mlops-templates # organization/repository-name; organization not required because implicitly linked and accessed via Service Principal
+      type: git
+      ref: main
+
+stages:
+  - stage: DeployTrainingPipeline
+    displayName: Deploy Training Pipeline
+    jobs:
+      - job: DeployTrainingPipeline
+        timeoutInMinutes: 120 # how long to run the job before automatically cancelling
+        steps:
+          - checkout: self
+            path: s/
+          - task: Bash@3
+            displayName: "Prevent repos dir warnings"
+            inputs:
+              targetType: "inline"
+              script: |
+                set -e
+                mkdir "$(Build.Repository.Name)"
+                mkdir "mlops-templates"
+          - checkout: mlops-templates
+            path: s/templates/
+
+          # Extract environment_name from train-env.yml
+          - task: Bash@3
+            displayName: "Extract environment_name from train-env.yml"
+            inputs:
+              targetType: "inline"
+              script: |
+                ENV_FILE="mlops/azureml/train/train-env.yml"
+                ENV_NAME=$(grep 'name:' "$ENV_FILE" | sed 's/.*name: \(\.\.\/\)*//')
+                echo "##vso[task.setvariable variable=environment_name]$ENV_NAME"
+
+          # Extract data_type and data_name from data.yml
+          - task: Bash@3
+            displayName: "Extract data_type and data_name from data.yml"
+            inputs:
+              targetType: "inline"
+              script: |
+                DATA_FILE="mlops/azureml/train/data.yml"
+                DATA_TYPE=$(grep 'type:' "$DATA_FILE" | sed 's/.*type: \(\.\.\/\)*//')
+                DATA_NAME=$(grep 'name:' "$DATA_FILE" | sed 's/.*name: \(\.\.\/\)*//')
+                echo "##vso[task.setvariable variable=data_type]$DATA_TYPE"
+                echo "##vso[task.setvariable variable=data_name]$DATA_NAME"
+
+          # Use dynamically extracted variables in templates
+          - template: templates/${{ variables.version }}/install-az-cli.yml@mlops-templates
+          - template: templates/${{ variables.version }}/install-aml-cli.yml@mlops-templates
+          - template: templates/${{ variables.version }}/connect-to-workspace.yml@mlops-templates
+          - template: templates/${{ variables.version }}/register-environment.yml@mlops-templates
+            parameters:
+              environment_name: ${{ variables.environment_name }}
+              environment_file: mlops/azureml/train/train-env.yml
+          - template: templates/${{ variables.version }}/create-compute.yml@mlops-templates
+            parameters:
+              cluster_name: cpu-cluster
+              size: Standard_DS3_v2
+              min_instances: 0
+              max_instances: 4
+              cluster_tier: dedicated # [low_priority, dedicated]
+          - template: templates/${{ variables.version }}/register-data.yml@mlops-templates
+            parameters:
+              data_type: ${{ variables.data_type }}
+              data_name: ${{ variables.data_name }}
+              data_file: mlops/azureml/train/data.yml
+          - template: templates/${{ variables.version }}/run-pipeline.yml@mlops-templates
+            parameters:
+              pipeline_file: mlops/azureml/train/pipeline.yml
+              experiment_name: $(environment)_${{ variables.data_name }}_train_$(Build.SourceBranchName)
+              display_name: $(environment)_${{ variables.data_name }}_run_$(Build.BuildID)
+              enable_monitoring: $(enable_monitoring)

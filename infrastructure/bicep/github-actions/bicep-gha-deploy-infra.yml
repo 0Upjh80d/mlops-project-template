@@ -1,0 +1,93 @@
+name: bicep-gha-deploy-infra
+
+on:
+  workflow_dispatch:
+
+jobs:
+  set-env-branch:
+    runs-on: ubuntu-latest
+    outputs:
+      config-file: ${{ steps.set-output-defaults.outputs.config-file }}
+    steps:
+      - id: set-prod-branch
+        name: set-prod-branch
+        if: ${{ github.ref == 'refs/heads/main' }}
+        run: echo "config_file=config-infra-prod.yml" >> $GITHUB_ENV
+      - id: set-dev-branch
+        name: set-dev-branch
+        if: ${{ github.ref != 'refs/heads/main' }}
+        run: echo "config_file=config-infra-dev.yml" >> $GITHUB_ENV
+      - id: set-output-defaults
+        name: set-output-defaults
+        run: echo "config-file=$config_file" >> $GITHUB_OUTPUT
+
+  get-config:
+    needs: set-env-branch
+    uses: 0Upjh80d/mlops-templates/.github/workflows/read-yaml.yml@main
+    with:
+      file_name: ${{ needs.set-env-branch.outputs.config-file }}
+
+  lint:
+    name: Lint and Preflight Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ github.ref == 'refs/heads/main' && secrets.AZURE_CREDENTIALS_PROD || secrets.AZURE_CREDENTIALS_DEV }} # Define your Azure credentials as a GitHub Secret
+
+      - name: Lint Bicep Code
+        run: az bicep build --file ./infrastructure/main.bicep
+
+  preflight-validation:
+    name: Preflight Validation
+    runs-on: ubuntu-latest
+    needs: [get-config, lint]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ github.ref == 'refs/heads/main' && secrets.AZURE_CREDENTIALS_PROD || secrets.AZURE_CREDENTIALS_DEV }}
+
+      - name: Run Preflight Validation
+        run: |
+          az deployment sub validate \
+            --name ${{ github.workflow }} \
+            --template-file ./infrastructure/main.bicep \
+            --location ${{ needs.get-config.outputs.location }} \
+            --parameters location=${{ needs.get-config.outputs.location }} \
+            prefix=${{ needs.get-config.outputs.namespace }} \
+            postfix=${{ needs.get-config.outputs.postfix }} \
+            env=${{ github.ref_name == 'main' && 'prod' || 'dev' }}
+
+  deploy:
+    name: Deploy Infrastructure
+    runs-on: ubuntu-latest
+    needs: [get-config, preflight-validation]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ github.ref == 'refs/heads/main' && secrets.AZURE_CREDENTIALS_PROD || secrets.AZURE_CREDENTIALS_DEV }}
+
+      - name: Deploy Bicep
+        run: |
+          az --version
+          echo "Deploying Bicep..."
+          az deployment sub create \
+            --name ${{ github.workflow }} \
+            --location ${{ needs.get-config.outputs.location }} \
+            --template-file ./infrastructure/main.bicep \
+            --parameters location=${{ needs.get-config.outputs.location }} \
+            prefix=${{ needs.get-config.outputs.namespace }} \
+            postfix=${{ needs.get-config.outputs.postfix }} \
+            env=${{ github.ref_name == 'main' && 'prod' || 'dev' }}
