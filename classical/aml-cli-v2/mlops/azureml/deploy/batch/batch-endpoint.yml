@@ -1,0 +1,4 @@
+$schema: https://azuremlschemas.azureedge.net/latest/batchEndpoint.schema.json
+name: taxi-fare
+description: Batch endpoint for taxi fare inference.
+auth_mode: aad_token

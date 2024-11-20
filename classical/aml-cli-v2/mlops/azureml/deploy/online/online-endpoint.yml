@@ -1,0 +1,4 @@
+$schema: https://azuremlschemas.azureedge.net/latest/managedOnlineEndpoint.schema.json
+name: taxi-fare
+description: Online endpoint for taxi fare inference.
+auth_mode: key
