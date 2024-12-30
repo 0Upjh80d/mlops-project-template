@@ -16,7 +16,7 @@ filelock==3.16.1
     # via virtualenv
 flake8==7.1.1
     # via -r requirements.ini
-identify==2.6.3
+identify==2.6.4
     # via pre-commit
 isort==5.13.2
     # via -r requirements.ini
