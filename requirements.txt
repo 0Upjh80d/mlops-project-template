@@ -16,7 +16,7 @@ filelock==3.16.1
     # via virtualenv
 flake8==7.1.1
     # via -r requirements.ini
-identify==2.6.4
+identify==2.6.5
     # via pre-commit
 isort==5.13.2
     # via -r requirements.ini
@@ -42,5 +42,5 @@ pyflakes==3.2.0
     # via flake8
 pyyaml==6.0.2
     # via pre-commit
-virtualenv==20.28.0
+virtualenv==20.28.1
     # via pre-commit
