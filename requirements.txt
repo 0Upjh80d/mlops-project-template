@@ -4,7 +4,7 @@
 #
 #    pip-compile requirements.ini
 #
-black==24.10.0
+black==25.1.0
     # via -r requirements.ini
 cfgv==3.4.0
     # via pre-commit
@@ -12,13 +12,13 @@ click==8.1.8
     # via black
 distlib==0.3.9
     # via virtualenv
-filelock==3.16.1
+filelock==3.17.0
     # via virtualenv
 flake8==7.1.1
     # via -r requirements.ini
-identify==2.6.5
+identify==2.6.6
     # via pre-commit
-isort==5.13.2
+isort==6.0.0
     # via -r requirements.ini
 mccabe==0.7.0
     # via flake8
@@ -34,7 +34,7 @@ platformdirs==4.3.6
     # via
     #   black
     #   virtualenv
-pre-commit==4.0.1
+pre-commit==4.1.0
     # via -r requirements.ini
 pycodestyle==2.12.1
     # via flake8
@@ -42,5 +42,5 @@ pyflakes==3.2.0
     # via flake8
 pyyaml==6.0.2
     # via pre-commit
-virtualenv==20.28.1
+virtualenv==20.29.1
     # via pre-commit
